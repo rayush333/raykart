@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -7,11 +8,11 @@ const app=express();
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
 app.use(cors());
-mongoose.connect('mongodb://localhost:27017/raykartDB',{useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true},function(err){
+mongoose.connect('mongodb+srv://ayush-admin:'+process.env.DB_PASSWORD+'@cluster0.ahstp.mongodb.net/raykartDB?retryWrites=true&w=majority',{useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true},function(err){
     if(err)
     console.log(err);
     else
-    console.log("Connected to local DB");
+    console.log("Connected to remote DB");
 });
 const orderSchema = new mongoose.Schema({
     user: {
@@ -26,6 +27,11 @@ const orderSchema = new mongoose.Schema({
     amount: Number,
     items: [{type: String}],
     time: String
+});
+const reviewSchema = new mongoose.Schema({
+    stars: Number,
+    user: String,
+    comment: String
 });
 const userSchema = new mongoose.Schema({
     email: {
@@ -42,11 +48,13 @@ const productSchema = new mongoose.Schema({
     title: String,
     rating: Number,
     image: String,
-    price: Number
+    price: Number,
+    reviews: [{type: reviewSchema}]
 });
 const User = mongoose.model("User",userSchema);
 const Product = mongoose.model("Product",productSchema);
 const Order = mongoose.model("Order",orderSchema);
+const Review = mongoose.model("Review",reviewSchema);
 app.patch("/users/:email",function(req,res){
     console.log(req.body.basket);
     let array=[];
@@ -104,6 +112,14 @@ app.post("/orders",function(req,res){
     });
     res.send(orderid);
 });
+app.get("/orders/:email",function(req,res){
+    Order.find({user: req.params.email},function(err,orders){
+        if(err)
+        console.log(err);
+        else
+        res.send(orders);
+    });
+});
 app.post("/register", function(req,res){
     const newuser = new User({...req.body, basket: [], orders: []});
     newuser.save(function(err){
@@ -135,6 +151,27 @@ app.post("/payments/create",async function(req,res){
     });
     res.status(201).send({
         clientSecret: paymentIntent.client_secret
+    });
+});
+app.post("/reviews/:productid",function(req,res){
+    Product.findOne({_id: req.params.productid}, function(err,product){
+        if(err)
+        console.log(err);
+        else
+        {
+            const newreview = new Review(req.body);
+            product.reviews.push(newreview);
+            const sum = product.reviews.reduce((acc,review)=>{
+                return acc+review.stars; 
+            },0);
+            product.rating = Math.ceil(sum/product.reviews.length);
+            product.save((err)=>{
+                if(err)
+                console.log(err);
+                else
+                res.send("Review registered");
+            });
+        }
     });
 });
 app.listen(process.env.PORT || 5000, function(){
